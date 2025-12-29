@@ -21,6 +21,12 @@ Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, e
 |---------|-------------|
 | [travel-video-analyzer](google-adk/travel-video-analyzer) | Multi-agent app that analyzes travel videos using Claude Vision |
 
+### LangGraph
+
+| Example | Description |
+|---------|-------------|
+| [travel-video-analyzer](langgraph/travel-video-analyzer) | Multi-agent supervisor pattern that analyzes travel videos using Claude Vision |
+
 ## Getting Started
 
 1. **Get your Lumoz API key**
