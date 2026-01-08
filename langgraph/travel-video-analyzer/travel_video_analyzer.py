@@ -28,7 +28,6 @@ import traceback
 from typing import Annotated, Literal, TypedDict
 
 # Third-party - Core
-import anthropic
 import cv2
 from dotenv import load_dotenv
 
@@ -49,8 +48,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from openinference.instrumentation.langchain import LangChainInstrumentor
 
 # Load environment variables
-env_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env"))
-load_dotenv(dotenv_path=env_path)
+load_dotenv()
 
 
 # ============================================================================
@@ -128,6 +126,11 @@ def configure_lumoz_tracing():
     span_processor = ImageStrippingSpanProcessor(otlp_exporter, max_image_chars=100)
     tracer_provider.add_span_processor(span_processor)
 
+    # Initialize Lumoz SDK to enable experiment config injection
+    # This patches OpenInference to intercept LLM calls and apply overrides
+    import lumoz
+    lumoz.init()
+
     LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
 
     return tracer_provider
@@ -147,9 +150,6 @@ if not ANTHROPIC_API_KEY:
 
 # LangChain model
 llm = ChatAnthropic(model="claude-sonnet-4-20250514")
-
-# Direct Anthropic client for vision tool
-anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 # ============================================================================
@@ -171,7 +171,7 @@ class AgentState(TypedDict):
 # ============================================================================
 
 @tool
-def extract_video_frames(video_path: str, num_frames: int = 8) -> str:
+def extract_video_frames(video_path: str, num_frames: int = 2) -> str:
     """
     Extract key frames from a travel video for destination analysis.
 
@@ -244,20 +244,22 @@ def analyze_frames_with_vision(frame_paths_json: str) -> str:
     if not frame_paths:
         return json.dumps({"error": "No frame paths provided"})
 
-    image_content = []
+    # Build multi-modal content for LangChain
+    message_content = []
     for frame_path in frame_paths[:8]:
         if os.path.exists(frame_path):
             with open(frame_path, "rb") as f:
                 image_data = base64.b64encode(f.read()).decode("utf-8")
-            image_content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": "image/jpeg", "data": image_data}
+            message_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
             })
 
-    if not image_content:
+    if not message_content:
         return json.dumps({"error": "Could not load any frame images"})
 
-    image_content.append({
+    num_images = len(message_content)
+    message_content.append({
         "type": "text",
         "text": """Analyze these travel video frames and identify the destination.
 
@@ -277,13 +279,11 @@ Return JSON with this structure:
 Return ONLY the JSON object, no other text."""
     })
 
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2048,
-        messages=[{"role": "user", "content": image_content}]
-    )
+    # Use LangChain ChatAnthropic for proper instrumentation
+    vision_llm = ChatAnthropic(model="claude-sonnet-4-20250514", max_tokens=2048)
+    response = vision_llm.invoke([HumanMessage(content=message_content)])
 
-    text = response.content[0].text if response.content else ""
+    text = response.content if response.content else ""
 
     try:
         start, end = text.find("{"), text.rfind("}") + 1
@@ -294,7 +294,7 @@ Return ONLY the JSON object, no other text."""
     return json.dumps({
         "success": True,
         "destination_info": destination_info,
-        "frames_analyzed": len(image_content) - 1
+        "frames_analyzed": num_images
     })
 
 
@@ -317,10 +317,9 @@ def generate_destination_tags(destination_info_json: str) -> str:
     if not destination_info:
         return json.dumps({"error": "No destination info provided"})
 
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": f"""Generate tags for this travel destination:
+    # Use LangChain ChatAnthropic for proper instrumentation
+    tagging_llm = ChatAnthropic(model="claude-sonnet-4-20250514", max_tokens=1024)
+    response = tagging_llm.invoke(f"""Generate tags for this travel destination:
 
 {json.dumps(destination_info, indent=2)}
 
@@ -333,10 +332,9 @@ Return JSON with lowercase, hyphenated tags:
     "all_tags": ["all unique tags combined"]
 }}
 
-Return ONLY the JSON object."""}]
-    )
+Return ONLY the JSON object.""")
 
-    text = response.content[0].text if response.content else ""
+    text = response.content if response.content else ""
 
     try:
         start, end = text.find("{"), text.rfind("}") + 1
@@ -672,6 +670,33 @@ def analyze_video(
         })
 
     return result
+
+
+def run_analysis(input: str) -> dict:
+    """
+    Entry point for experiment harness.
+
+    Takes a message string and extracts the video path to analyze.
+    This matches the trace input format captured during normal usage.
+
+    Args:
+        input: Message like "Please analyze this travel video: ./videos/sample.mp4"
+               or just a video path like "./videos/sample.mp4"
+
+    Returns:
+        dict with analysis results
+    """
+    # Extract video path from input
+    video_path = input
+
+    # If input is a message, extract the path
+    if ":" in input and not input.startswith(("./", "/", "videos/")):
+        # Split on last colon and take the path part
+        parts = input.rsplit(":", 1)
+        if len(parts) == 2:
+            video_path = parts[1].strip()
+
+    return analyze_video(video_path)
 
 
 def print_results(results: dict):

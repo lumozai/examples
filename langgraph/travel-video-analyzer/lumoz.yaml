@@ -1,0 +1,5 @@
+# Lumoz configuration for travel video analyzer
+entry_point: travel_video_analyzer:run_analysis
+input_field: input
+env_file: .env
+api_endpoint: http://localhost:3001/evals
