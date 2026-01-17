@@ -126,10 +126,10 @@ def configure_lumoz_tracing():
     span_processor = ImageStrippingSpanProcessor(otlp_exporter, max_image_chars=100)
     tracer_provider.add_span_processor(span_processor)
 
-    # Initialize Lumoz SDK to enable experiment config injection
-    # This patches OpenInference to intercept LLM calls and apply overrides
-    import lumoz
-    lumoz.init()
+    # NOTE: Lumoz SDK initialization disabled until SDK is publicly distributed
+    # Uncomment the following lines to enable experiment config injection:
+    # import lumoz
+    # lumoz.init()
 
     LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
 
