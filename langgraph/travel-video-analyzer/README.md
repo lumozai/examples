@@ -116,9 +116,29 @@ python travel_video_analyzer.py ./videos/travel-video-0.mp4
 - Lumoz API key (for observability)
 - Video file (mp4, mov, avi)
 
-## Handling Large Vision Payloads
+## Span Processing
 
-This example includes an `ImageStrippingSpanProcessor` that automatically truncates base64 image data in traces. This prevents large payloads from causing export failures while preserving all other trace information.
+Use a span processor to batch and export spans:
+
+```python
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider.add_span_processor(BatchSpanProcessor(exporter))
+```
+
+### Image Payload Handling (Vision API)
+
+If your app sends images to Claude Vision, use `ImageStrippingSpanProcessor` instead. Large base64-encoded images in span attributes cause export timeouts and duplicate spans.
+
+```python
+# For apps WITHOUT Vision API - use standard BatchSpanProcessor
+provider.add_span_processor(BatchSpanProcessor(exporter))
+
+# For apps WITH Vision API - use ImageStrippingSpanProcessor
+provider.add_span_processor(ImageStrippingSpanProcessor(exporter))
+```
+
+This example includes an `ImageStrippingSpanProcessor` that extends `BatchSpanProcessor` and automatically truncates base64 image data before export.
 
 ## Comparison with ADK Version
 
