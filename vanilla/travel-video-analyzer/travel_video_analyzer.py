@@ -116,6 +116,11 @@ def extract_frames(video_path: str, num_frames: int = 2) -> dict:
     """Extract key frames from a video."""
     print(f"\n[extract_frames] {video_path}")
 
+    # Add custom attributes to the current span
+    span = trace.get_current_span()
+    span.set_attribute("video.path", video_path)
+    span.set_attribute("video.requested_frames", num_frames)
+
     if not os.path.exists(video_path):
         return {"error": f"Video not found: {video_path}"}
 
@@ -140,12 +145,17 @@ def extract_frames(video_path: str, num_frames: int = 2) -> dict:
     cap.release()
     print(f"[extract_frames] → {len(frames)} frames")
 
+    # Add attributes after processing
+    duration = round(total / fps, 2) if fps > 0 else 0
+    span.set_attribute("video.duration_seconds", duration)
+    span.set_attribute("video.extracted_frames", len(frames))
+
     return {
         "success": True,
         "frame_paths": frames,
         "metadata": {
             "filename": os.path.basename(video_path),
-            "duration_seconds": round(total / fps, 2) if fps > 0 else 0,
+            "duration_seconds": duration,
         }
     }
 
@@ -154,6 +164,10 @@ def extract_frames(video_path: str, num_frames: int = 2) -> dict:
 def analyze_frames(frame_paths: list[str]) -> dict:
     """Analyze frames with Claude Vision to identify destination."""
     print(f"\n[analyze_frames] {len(frame_paths)} frames")
+
+    span = trace.get_current_span()
+    span.set_attribute("vision.frame_count", len(frame_paths))
+    span.set_attribute("vision.model", MODEL)
 
     if not frame_paths:
         return {"error": "No frames provided"}
@@ -206,6 +220,10 @@ Return ONLY the JSON object."""
     loc = destination.get("location", {})
     print(f"[analyze_frames] → {loc.get('city', '?')}, {loc.get('country', '?')}")
 
+    # Add detected location as attributes
+    span.set_attribute("vision.detected_city", loc.get("city", "unknown"))
+    span.set_attribute("vision.detected_country", loc.get("country", "unknown"))
+
     return {"success": True, "destination_info": destination}
 
 
@@ -213,6 +231,9 @@ Return ONLY the JSON object."""
 def generate_tags(destination_info: dict) -> dict:
     """Generate searchable tags from destination info."""
     print(f"\n[generate_tags]")
+
+    span = trace.get_current_span()
+    span.set_attribute("tags.model", MODEL)
 
     if not destination_info:
         return {"error": "No destination info"}
@@ -245,7 +266,11 @@ Return ONLY the JSON object."""
     except json.JSONDecodeError:
         tags = {"all_tags": []}
 
-    print(f"[generate_tags] → {len(tags.get('all_tags', []))} tags")
+    all_tags = tags.get("all_tags", [])
+    print(f"[generate_tags] → {len(all_tags)} tags")
+
+    span.set_attribute("tags.count", len(all_tags))
+
     return {"success": True, "tags": tags}
 
 

@@ -67,9 +67,49 @@ tracer = OITracer(trace.get_tracer(__name__), TraceConfig())
 @tracer.llm                          # For LLM calls
 ```
 
-## Image Payload Handling
+## Custom Span Attributes
 
-Vision API calls include large base64-encoded images in span attributes. To prevent export timeouts, we use a custom `ImageStrippingSpanProcessor` that truncates image data before sending to the collector:
+Add custom attributes from within decorated functions:
+
+```python
+from opentelemetry import trace
+
+@tracer.tool(name="analyze_frames", description="Analyze frames with Vision")
+def analyze_frames(frame_paths: list[str]) -> dict:
+    span = trace.get_current_span()
+    span.set_attribute("vision.frame_count", len(frame_paths))
+    span.set_attribute("vision.model", MODEL)
+
+    # ... processing ...
+
+    # Add attributes after computation
+    span.set_attribute("vision.detected_city", city)
+    return result
+```
+
+## Span Processing
+
+Use a span processor to batch and export spans:
+
+```python
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider.add_span_processor(BatchSpanProcessor(exporter))
+```
+
+### Image Payload Handling (Vision API)
+
+If your app sends images to Claude Vision, use `ImageStrippingSpanProcessor` instead. Large base64-encoded images in span attributes cause export timeouts and duplicate spans.
+
+```python
+# For apps WITHOUT Vision API - use standard BatchSpanProcessor
+provider.add_span_processor(BatchSpanProcessor(exporter))
+
+# For apps WITH Vision API - use ImageStrippingSpanProcessor
+provider.add_span_processor(ImageStrippingSpanProcessor(exporter))
+```
+
+The `ImageStrippingSpanProcessor` (included in this example) extends `BatchSpanProcessor` and truncates base64 image data before export:
 
 ```python
 class ImageStrippingSpanProcessor(BatchSpanProcessor):
@@ -80,5 +120,3 @@ class ImageStrippingSpanProcessor(BatchSpanProcessor):
         # Keeps first 100 chars + "...[IMAGE_TRUNCATED]"
         super().on_end(span)
 ```
-
-This is essential for any workflow that passes images to Claude Vision.
