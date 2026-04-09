@@ -55,3 +55,7 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+#coding agents
+.claude
+.codex
