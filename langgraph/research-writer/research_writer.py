@@ -251,13 +251,13 @@ research_agent = create_agent(
     llm,
     tools=[vector_search],
     system_prompt=RESEARCH_PROMPT,
-    name="researcher",
+    name="researcher_agent",
 )
 
 writer_agent = create_agent(
     llm,
     system_prompt=WRITER_PROMPT,
-    name="writer",
+    name="writer_agent",
 )
 
 
