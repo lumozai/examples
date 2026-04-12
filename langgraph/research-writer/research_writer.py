@@ -69,50 +69,7 @@ if not os.environ.get("OPENAI_API_KEY"):
 
 
 # ============================================================================
-# Image Stripping Span Processor
-# ============================================================================
-
-if _OTEL_AVAILABLE:
-    BASE64_IMAGE_PATTERNS = [
-        re.compile(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]{100,}'),
-        re.compile(r'/9j/[A-Za-z0-9+/=]{100,}'),
-        re.compile(r'iVBOR[A-Za-z0-9+/=]{100,}'),
-    ]
-
-    class ImageStrippingSpanProcessor(BatchSpanProcessor):
-        """Strips base64 image data from spans before export."""
-
-        def __init__(self, span_exporter: SpanExporter, max_image_chars: int = 100):
-            super().__init__(span_exporter)
-            self.max_image_chars = max_image_chars
-
-        def _strip_images_from_value(self, value):
-            if isinstance(value, str):
-                result = value
-                for pattern in BASE64_IMAGE_PATTERNS:
-                    result = pattern.sub(
-                        lambda m: m.group(0)[:self.max_image_chars] + '...[IMAGE_TRUNCATED]',
-                        result
-                    )
-                return result
-            elif isinstance(value, (list, tuple)):
-                return type(value)(self._strip_images_from_value(v) for v in value)
-            elif isinstance(value, dict):
-                return {k: self._strip_images_from_value(v) for k, v in value.items()}
-            return value
-
-        def on_end(self, span: ReadableSpan) -> None:
-            if span.attributes:
-                modified_attrs = {}
-                for key, value in span.attributes.items():
-                    modified_attrs[key] = self._strip_images_from_value(value)
-                if hasattr(span, '_attributes'):
-                    span._attributes = modified_attrs
-            super().on_end(span)
-
-
-# ============================================================================
-# Lumoz Tracing (Optional)
+# Lumoz Tracing
 # ============================================================================
 
 def configure_lumoz_tracing():
