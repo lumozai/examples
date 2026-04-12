@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 
 # Third-party - LangGraph / LangChain
 from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
@@ -285,16 +285,15 @@ Your workflow:
 
 Write in a conversational but informative tone. Be concise and direct."""
 
-research_agent = create_react_agent(
+research_agent = create_agent(
     llm,
     tools=[vector_search],
-    prompt=RESEARCH_PROMPT,
+    system_prompt=RESEARCH_PROMPT,
 )
 
-writer_agent = create_react_agent(
+writer_agent = create_agent(
     llm,
-    tools=[],
-    prompt=WRITER_PROMPT,
+    system_prompt=WRITER_PROMPT,
 )
 
 
