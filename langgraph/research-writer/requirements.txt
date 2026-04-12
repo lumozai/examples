@@ -2,12 +2,8 @@
 langgraph>=0.2.0
 langchain-openai>=0.3.0
 langchain-core>=0.3.0
-
-# OpenAI (embeddings)
-openai>=1.0.0
-
-# Vector math
-numpy>=1.24.0
+langchain-community>=0.4.0
+langchain-text-splitters>=1.0.0
 
 # Environment
 python-dotenv>=1.0.0

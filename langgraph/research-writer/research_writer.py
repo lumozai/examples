@@ -13,7 +13,6 @@ Instrumented with OpenInference for optional Lumoz observability.
 
 # Standard library
 import base64
-import glob
 import json
 import operator
 import os
@@ -25,16 +24,19 @@ from pathlib import Path
 from typing import Annotated, TypedDict
 
 # Third-party - Core
-import numpy as np
 from dotenv import load_dotenv
 
 # Third-party - LangGraph / LangChain
 from langgraph.graph import StateGraph, START, END
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import HumanMessage
-from langchain_core.tools import tool
+from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.tools.retriever import create_retriever_tool
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Third-party - OpenTelemetry / OpenInference (optional)
 try:
@@ -48,9 +50,6 @@ try:
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
-
-# Third-party - OpenAI (for embeddings)
-import openai as openai_lib
 
 # Load environment variables
 load_dotenv()
@@ -152,62 +151,14 @@ tracing_enabled = tracer_provider is not None
 
 
 # ============================================================================
-# In-Memory Vector Store
+# In-Memory Vector Store (LangChain-native)
 # ============================================================================
 
-_store: list[dict] = []  # Each entry: {"text": str, "embedding": list[float]}
-_openai_client = openai_lib.OpenAI()
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+vector_store = InMemoryVectorStore(embedding=embeddings)
+_chunk_count = 0  # Track total chunks for CLI display
 
-
-def embed(text: str) -> list[float]:
-    """Embed text using OpenAI text-embedding-3-small."""
-    response = _openai_client.embeddings.create(
-        model="text-embedding-3-small",
-        input=text,
-    )
-    return response.data[0].embedding
-
-
-def chunk(text: str, size: int = 512, overlap: int = 50) -> list[str]:
-    """Split text into overlapping character-based chunks."""
-    chunks = []
-    for i in range(0, len(text), size - overlap):
-        chunks.append(text[i:i + size])
-    return chunks
-
-
-def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors using numpy."""
-    a_arr = np.array(a)
-    b_arr = np.array(b)
-    dot = np.dot(a_arr, b_arr)
-    norm_a = np.linalg.norm(a_arr)
-    norm_b = np.linalg.norm(b_arr)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-    return float(dot / (norm_a * norm_b))
-
-
-def ingest(text: str) -> int:
-    """Chunk, embed, and store text. Returns the number of chunks added."""
-    chunks = chunk(text)
-    for c in chunks:
-        embedding = embed(c)
-        _store.append({"text": c, "embedding": embedding})
-    return len(chunks)
-
-
-def search(query: str, top_k: int = 5) -> list[dict]:
-    """Search the vector store by cosine similarity. Returns [{text, score}]."""
-    if not _store:
-        return []
-    query_embedding = embed(query)
-    scored = [
-        {"text": entry["text"], "score": cosine_similarity(query_embedding, entry["embedding"])}
-        for entry in _store
-    ]
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:top_k]
+_splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50)
 
 
 def load_documents(directory: str) -> tuple[int, int]:
@@ -215,36 +166,39 @@ def load_documents(directory: str) -> tuple[int, int]:
 
     Returns (file_count, chunk_count).
     """
-    pattern = os.path.join(directory, "*.txt")
-    files = sorted(glob.glob(pattern))
-    if not files:
+    global _chunk_count
+    loader = DirectoryLoader(directory, glob="*.txt", loader_cls=TextLoader)
+    docs = loader.load()
+    if not docs:
         print(f"[knowledge] No .txt files found in {directory}")
         return 0, 0
-    total_chunks = 0
-    for filepath in files:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-        n = ingest(content)
-        total_chunks += n
-    return len(files), total_chunks
+    chunks = _splitter.split_documents(docs)
+    vector_store.add_documents(chunks)
+    _chunk_count += len(chunks)
+    # Count unique source files
+    files = set(doc.metadata.get("source", "") for doc in docs)
+    return len(files), len(chunks)
+
+
+def ingest(text: str) -> int:
+    """Add text to the vector store at runtime. Returns chunk count."""
+    global _chunk_count
+    chunks = _splitter.split_documents([Document(page_content=text)])
+    vector_store.add_documents(chunks)
+    _chunk_count += len(chunks)
+    return len(chunks)
 
 
 # ============================================================================
 # Tool Definition
 # ============================================================================
 
-@tool
-def vector_search(query: str) -> str:
-    """Search the knowledge base for information relevant to a query.
-
-    Args:
-        query: The search query to find relevant documents.
-
-    Returns:
-        JSON string with search results and whether any were found.
-    """
-    results = search(query, top_k=5)
-    return json.dumps({"results": results, "found": len(results) > 0})
+retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+vector_search = create_retriever_tool(
+    retriever,
+    "vector_search",
+    "Search the knowledge base for information relevant to a query.",
+)
 
 
 # ============================================================================
@@ -368,7 +322,7 @@ def main():
     file_count, chunk_count = load_documents(str(docs_dir))
     if file_count > 0:
         print(f"[knowledge] Loaded {file_count} files ({chunk_count} chunks)")
-    print(f"\nKnowledge base: {len(_store)} chunks ready")
+    print(f"\nKnowledge base: {_chunk_count} chunks ready")
 
     print("\nCommands:")
     print("  /ingest <text>  — Add text to the knowledge base")
@@ -401,7 +355,7 @@ def main():
             text = user_input[8:].strip()
             if text:
                 n = ingest(text)
-                print(f"[knowledge] Ingested {n} chunks ({len(_store)} total)\n")
+                print(f"[knowledge] Ingested {n} chunks ({_chunk_count} total)\n")
             else:
                 print("[knowledge] No text provided.\n")
             continue
