@@ -256,31 +256,31 @@ writer_agent = create_agent(
 # ============================================================================
 
 def research_node(state: ResearchWriterState) -> dict:
-    """Invoke the research agent and return its findings."""
-    query = state["query"]
+    """Bridge: feed query to research agent subgraph, extract research output."""
     result = research_agent.invoke({
-        "messages": [HumanMessage(content=query)],
+        "messages": [HumanMessage(content=state["query"])],
     })
-    last_msg = result["messages"][-1]
-    research_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-    return {"research": research_text}
+    research_text = result["messages"][-1].content
+    return {
+        "research": research_text,
+        "messages": [HumanMessage(content=f"Research: {research_text}")],
+    }
 
 
 def write_node(state: ResearchWriterState) -> dict:
-    """Invoke the writer agent to polish the research into a final response."""
-    query = state["query"]
-    research = state["research"]
+    """Bridge: feed research to writer agent subgraph, extract final response."""
     prompt = (
-        f"Original question: {query}\n\n"
-        f"Research findings:\n{research}\n\n"
-        "Please write a polished, well-structured response based on the research above."
+        f"Original question: {state['query']}\n\n"
+        f"Research findings:\n{state['research']}"
     )
     result = writer_agent.invoke({
         "messages": [HumanMessage(content=prompt)],
     })
-    last_msg = result["messages"][-1]
-    response_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-    return {"response": response_text}
+    response_text = result["messages"][-1].content
+    return {
+        "response": response_text,
+        "messages": [HumanMessage(content=response_text)],
+    }
 
 
 # ============================================================================
@@ -334,6 +334,15 @@ def main():
     # Get tracer if tracing enabled
     tracer = trace.get_tracer("research_writer") if tracing_enabled else None
 
+    # Config uses session_id as thread_id so MemorySaver persists conversation
+    config = {
+        "configurable": {
+            "thread_id": session_id,
+            "user_id": user_id,
+            "session_id": session_id,
+        }
+    }
+
     while True:
         try:
             user_input = input("You: ").strip()
@@ -362,15 +371,6 @@ def main():
 
         # Run the research-writer pipeline
         print("\n[researching...]\n")
-
-        thread_id = str(uuid.uuid4())
-        config = {
-            "configurable": {
-                "thread_id": thread_id,
-                "user_id": user_id,
-                "session_id": session_id,
-            }
-        }
 
         # Wrap in root span if tracing is enabled
         if tracing_enabled and tracer:
