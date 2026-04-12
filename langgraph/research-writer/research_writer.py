@@ -47,9 +47,17 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from openinference.instrumentation.langchain import LangChainInstrumentor
+    from openinference.instrumentation import using_attributes
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
+
+if not _OTEL_AVAILABLE:
+    from contextlib import contextmanager
+
+    @contextmanager
+    def using_attributes(**kwargs):
+        yield
 
 # Load environment variables
 load_dotenv()
@@ -254,35 +262,36 @@ writer_agent = create_agent(
 
 
 # ============================================================================
-# Graph Nodes
+# State Adapter Nodes
 # ============================================================================
 
-def research_node(state: ResearchWriterState) -> dict:
-    """Bridge: feed query to research agent subgraph, extract research output."""
-    result = research_agent.invoke({
-        "messages": [HumanMessage(content=state["query"])],
-    })
-    research_text = result["messages"][-1].content
-    return {
-        "research": research_text,
-        "messages": [HumanMessage(content=f"Research: {research_text}")],
-    }
+def prepare_research(state: ResearchWriterState) -> dict:
+    """Set up messages for the research agent from the user's query."""
+    return {"messages": [HumanMessage(content=state["query"])]}
 
 
-def write_node(state: ResearchWriterState) -> dict:
-    """Bridge: feed research to writer agent subgraph, extract final response."""
+def save_research(state: ResearchWriterState) -> dict:
+    """Extract research findings from the agent's last message."""
+    last_msg = state["messages"][-1]
+    research_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+    return {"research": research_text}
+
+
+def prepare_writing(state: ResearchWriterState) -> dict:
+    """Set up messages for the writer agent with query and research context."""
     prompt = (
         f"Original question: {state['query']}\n\n"
-        f"Research findings:\n{state['research']}"
+        f"Research findings:\n{state['research']}\n\n"
+        "Please write a polished, well-structured response based on the research above."
     )
-    result = writer_agent.invoke({
-        "messages": [HumanMessage(content=prompt)],
-    })
-    response_text = result["messages"][-1].content
-    return {
-        "response": response_text,
-        "messages": [HumanMessage(content=response_text)],
-    }
+    return {"messages": [HumanMessage(content=prompt)]}
+
+
+def save_response(state: ResearchWriterState) -> dict:
+    """Extract the final response from the writer agent's last message."""
+    last_msg = state["messages"][-1]
+    response_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+    return {"response": response_text}
 
 
 # ============================================================================
@@ -290,13 +299,26 @@ def write_node(state: ResearchWriterState) -> dict:
 # ============================================================================
 
 def build_graph():
-    """Build the research-writer LangGraph pipeline."""
+    """Build the research-writer LangGraph pipeline with agent subgraph nodes."""
     graph = StateGraph(ResearchWriterState)
-    graph.add_node("researcher", research_node)
-    graph.add_node("writer", write_node)
-    graph.add_edge(START, "researcher")
-    graph.add_edge("researcher", "writer")
-    graph.add_edge("writer", END)
+
+    # State adapters and agent subgraph nodes
+    graph.add_node("prepare_research", prepare_research)
+    graph.add_node("researcher", research_agent)      # Agent as subgraph node
+    graph.add_node("save_research", save_research)
+    graph.add_node("prepare_writing", prepare_writing)
+    graph.add_node("writer", writer_agent)             # Agent as subgraph node
+    graph.add_node("save_response", save_response)
+
+    # Linear flow
+    graph.add_edge(START, "prepare_research")
+    graph.add_edge("prepare_research", "researcher")
+    graph.add_edge("researcher", "save_research")
+    graph.add_edge("save_research", "prepare_writing")
+    graph.add_edge("prepare_writing", "writer")
+    graph.add_edge("writer", "save_response")
+    graph.add_edge("save_response", END)
+
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
 
@@ -342,7 +364,11 @@ def main():
             "thread_id": session_id,
             "user_id": user_id,
             "session_id": session_id,
-        }
+        },
+        "metadata": {
+            "session_id": session_id,
+            "user_id": user_id,
+        },
     }
 
     while True:
@@ -374,9 +400,9 @@ def main():
         # Run the research-writer pipeline
         print("\n[researching...]\n")
 
-        # Wrap in root span if tracing is enabled
+        # Wrap in root span with OpenInference context attributes
         if tracing_enabled and tracer:
-            ctx = tracer.start_as_current_span(
+            span_ctx = tracer.start_as_current_span(
                 "research_writer_query",
                 attributes={
                     "user.id": user_id,
@@ -385,9 +411,19 @@ def main():
                 },
             )
         else:
-            ctx = nullcontext()
+            span_ctx = nullcontext()
 
-        with ctx:
+        # using_attributes propagates user.id and session.id to all
+        # auto-instrumented LangChain/LangGraph spans
+        if tracing_enabled:
+            attr_ctx = using_attributes(
+                user_id=user_id,
+                session_id=session_id,
+            )
+        else:
+            attr_ctx = nullcontext()
+
+        with span_ctx, attr_ctx:
             result = app.invoke(
                 {
                     "query": user_input,
