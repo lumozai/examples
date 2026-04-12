@@ -1,0 +1,18 @@
+# LangGraph and LLM
+langgraph>=0.2.0
+langchain-openai>=0.3.0
+langchain-core>=0.3.0
+
+# OpenAI (embeddings)
+openai>=1.0.0
+
+# Vector math
+numpy>=1.24.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# OpenTelemetry / OpenInference instrumentation (optional — for Lumoz tracing)
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-http>=1.20.0
+openinference-instrumentation-langchain>=0.1.0
