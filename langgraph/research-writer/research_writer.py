@@ -243,11 +243,13 @@ research_agent = create_agent(
     llm,
     tools=[vector_search],
     system_prompt=RESEARCH_PROMPT,
+    name="researcher",
 )
 
 writer_agent = create_agent(
     llm,
     system_prompt=WRITER_PROMPT,
+    name="writer",
 )
 
 
@@ -290,11 +292,11 @@ def write_node(state: ResearchWriterState) -> dict:
 def build_graph():
     """Build the research-writer LangGraph pipeline."""
     graph = StateGraph(ResearchWriterState)
-    graph.add_node("research", research_node)
-    graph.add_node("write", write_node)
-    graph.add_edge(START, "research")
-    graph.add_edge("research", "write")
-    graph.add_edge("write", END)
+    graph.add_node("researcher", research_node)
+    graph.add_node("writer", write_node)
+    graph.add_edge(START, "researcher")
+    graph.add_edge("researcher", "writer")
+    graph.add_edge("writer", END)
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
 
