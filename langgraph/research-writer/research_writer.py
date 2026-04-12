@@ -16,7 +16,6 @@ import base64
 import json
 import operator
 import os
-import re
 import sys
 import uuid
 from contextlib import nullcontext
@@ -42,8 +41,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 try:
     from opentelemetry import trace
     from opentelemetry.sdk import trace as trace_sdk
-    from opentelemetry.sdk.trace import ReadableSpan
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from openinference.instrumentation.langchain import LangChainInstrumentor
@@ -101,8 +99,7 @@ def configure_lumoz_tracing():
     trace.set_tracer_provider(tracer_provider)
 
     otlp_exporter = OTLPSpanExporter(endpoint=otel_endpoint, headers=headers)
-    span_processor = ImageStrippingSpanProcessor(otlp_exporter, max_image_chars=100)
-    tracer_provider.add_span_processor(span_processor)
+    tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
 
     LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
 
