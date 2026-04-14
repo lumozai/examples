@@ -13,6 +13,16 @@ Lumoz is a reliability and security platform for AI applications. It provides de
 
 Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, ensuring your instrumentation is portable and not locked into proprietary formats.
 
+## Connectivity Test
+
+Before running any example, verify your environment can reach Lumoz and send traces:
+
+```bash
+python connectivity/test_connectivity.py "your-client-id:your-client-secret"
+```
+
+A `200 OK` response confirms your API key and network connectivity are working. See [connectivity/README.md](connectivity/README.md) for expected output and troubleshooting.
+
 ## Examples
 
 ### Google ADK
@@ -26,6 +36,19 @@ Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, e
 | Example | Description |
 |---------|-------------|
 | [travel-video-analyzer](langgraph/travel-video-analyzer) | Multi-agent supervisor pattern that analyzes travel videos using Claude Vision |
+| [research-writer](langgraph/research-writer) | Two-agent RAG pipeline — researcher searches a vector store, writer synthesizes findings |
+
+### Mastra
+
+| Example | Description |
+|---------|-------------|
+| [research-writer](mastra/research-writer) | Sequential multi-agent workflow — research agent queries a knowledge base, writer agent produces a polished response |
+
+### Vanilla (plain Python)
+
+| Example | Description |
+|---------|-------------|
+| [travel-video-analyzer](vanilla/travel-video-analyzer) | Multi-agent app using direct Anthropic API calls with OpenInference decorators — no framework required |
 
 ## Getting Started
 
