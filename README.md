@@ -13,15 +13,25 @@ Lumoz is a reliability and security platform for AI applications. It provides de
 
 Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, ensuring your instrumentation is portable and not locked into proprietary formats.
 
-## Connectivity Test
+## Getting Started
 
-Before running any example, verify your environment can reach Lumoz and send traces:
+1. **Get your Lumoz API key**
+   - Log in to [Lumoz Console](https://console.lumoz.ai)
+   - Enter your email and you will be sent login link
+   - Enter the required information. 
+   - You will be presented with the dialog to create and copy your Lumoz API Key 
 
-```bash
-python connectivity/test_connectivity.py "your-client-id:your-client-secret"
-```
+2. **Test connectivity** — verify your environment can reach Lumoz before running an example:
+   ```bash
+   python connectivity/test_connectivity.py "your Lumoz API key"
+   ```
+   A `200 OK` response confirms your API key and network are working. See [connectivity/README.md](connectivity/README.md) for expected output and troubleshooting.
 
-A `200 OK` response confirms your API key and network connectivity are working. See [connectivity/README.md](connectivity/README.md) for expected output and troubleshooting.
+3. **Choose an example** from the table below
+
+4. **Follow the example's README** for setup instructions and run the example
+
+5. **View traces** in the Lumoz Console
 
 ## Examples
 
@@ -50,28 +60,10 @@ A `200 OK` response confirms your API key and network connectivity are working. 
 |---------|-------------|
 | [travel-video-analyzer](vanilla/travel-video-analyzer) | Multi-agent app using direct Anthropic API calls with OpenInference decorators — no framework required |
 
-## Getting Started
+## Documentation & Support
 
-1. **Get your Lumoz API key**
-   - Log in to [Lumoz Console](https://console.lumoz.ai)
-   - Go to **Settings > API Keys**
-   - Create and copy your API key
-
-2. **Choose an example** from the table above
-
-3. **Follow the example's README** for setup instructions
-
-4. **View traces** in the Lumoz Console
-
-## Documentation
-
-- [Lumoz Setup Guide - Google ADK](https://docs.lumoz.ai/setup/google-adk) - Detailed setup instructions
 - [OpenInference](https://github.com/Arize-ai/openinference) - Open source instrumentation SDK
-
-## Support
-
 - Email: support@lumoz.ai
-- Discord: [Join our community](https://discord.gg/lumoz)
 
 ## License
 
