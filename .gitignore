@@ -57,5 +57,10 @@ logs/
 htmlcov/
 
 #coding agents
-.claude
-.codex
+.claude/
+.codex/
+
+#scripts
+scripts/
+agent-pod.yaml
+
