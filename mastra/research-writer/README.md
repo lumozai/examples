@@ -32,6 +32,12 @@ research-write workflow
 | `src/vectorStore.ts` | In-memory vector store using OpenAI embeddings |
 | `src/env.ts` | Environment variable loading |
 
+## Add Lumoz to Your Own Mastra App
+
+> **Just want the instrumentation code?** → [INSTRUMENTATION.md](INSTRUMENTATION.md)
+>
+> Covers: exporter setup, init order, user/session tracking, trace context propagation, graceful shutdown.
+
 ## Prerequisites
 
 - Node.js 18+
@@ -72,12 +78,7 @@ The CLI will prompt for a user ID (defaults to `demo-user`) and start an interac
 
 ## How Tracing Works
 
-1. **Tracing is initialized before app code** in `src/index.ts` to ensure the OpenTelemetry SDK captures all spans
-2. **User and session IDs** are passed via `tracingOptions.metadata` when starting the workflow
-3. **Trace context propagates** through the workflow by passing `{ tracing, tracingContext }` to each agent's `generate()` call
-4. All agent calls, tool executions, and LLM spans appear as a connected trace in Lumoz
-
-See [INSTRUMENTATION.md](INSTRUMENTATION.md) for the full setup details, code snippets, and trace structure.
+See [INSTRUMENTATION.md](INSTRUMENTATION.md) for full setup details, code snippets, and trace structure.
 
 ## Example Output
 
