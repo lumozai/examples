@@ -33,6 +33,15 @@ Success! Check Lumoz console for service 'lumoz-connectivity-test'
 ==================================================
 ```
 
+## View Your Trace
+
+After a successful run, find your trace in the Lumoz Console:
+
+1. Go to **Home**
+2. Click the **lumoz-connectivity-test** app card
+3. Navigate to the **Telemetry → Traces** tab
+4. Click the trace to explore span details
+
 ## Troubleshooting
 
 **Connection timed out**: Check firewall allows outbound HTTPS (port 443)

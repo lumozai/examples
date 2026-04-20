@@ -98,3 +98,11 @@ You: what's new in AI?
 Agent: ### What's New in AI: Key Developments
 ...
 ```
+
+## View Traces in Lumoz
+
+1. Run the app and send a query
+2. Open [Lumoz Console](https://console.lumoz.ai)
+3. Go to **Home** and click the **mastra-research-writer** app card
+4. Navigate to the **Telemetry → Traces** tab
+5. Click any trace to explore the research and write workflow spans, tool calls, and LLM interactions

@@ -106,8 +106,9 @@ python travel_video_analyzer.py ./videos/travel-video-0.mp4
 
 1. Run the analyzer on a video
 2. Open [Lumoz Console](https://console.lumoz.ai)
-3. Navigate to **Traces**
-4. See your supervisor routing, agent execution, and LLM interactions
+3. Go to **Home** and click the **travel-video-analyzer-langgraph** app card
+4. Navigate to the **Telemetry → Traces** tab
+5. Click any trace to explore supervisor routing, agent execution, and LLM interactions
 
 ## Requirements
 

@@ -55,6 +55,14 @@ analyze_video (CHAIN)
     └── Claude API call
 ```
 
+## View Traces in Lumoz
+
+1. Run the analyzer on a video
+2. Open [Lumoz Console](https://console.lumoz.ai)
+3. Go to **Home** and click the **travel-video-analyzer-vanilla** app card
+4. Navigate to the **Telemetry → Traces** tab
+5. Click any trace to explore the chain, tool calls, and LLM interactions
+
 ## Key Decorators
 
 ```python
