@@ -136,6 +136,6 @@ This example includes an `ImageStrippingSpanProcessor` that extends `BatchSpanPr
 
 ## Learn More
 
-- [Lumoz Documentation](https://docs.lumoz.ai)
-- [Google ADK Documentation](https://google.github.io/adk-docs/)
+- [Google ADK Documentation](https://adk.dev/)
 - [OpenInference](https://github.com/Arize-ai/openinference)
+- Questions? [support@lumoz.ai](mailto:support@lumoz.ai)

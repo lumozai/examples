@@ -147,6 +147,6 @@ Drop `.txt` files into the `documents/` directory and restart the app, or use `/
 
 ## Learn More
 
-- [Lumoz Documentation](https://docs.lumoz.ai)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [OpenInference](https://github.com/Arize-ai/openinference)
+- Questions? [support@lumoz.ai](mailto:support@lumoz.ai)

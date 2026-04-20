@@ -153,6 +153,6 @@ Both versions achieve the same result - the LLM decides which agent to call. Lan
 
 ## Learn More
 
-- [Lumoz Documentation](https://docs.lumoz.ai)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [OpenInference](https://github.com/Arize-ai/openinference)
+- Questions? [support@lumoz.ai](mailto:support@lumoz.ai)
