@@ -98,6 +98,12 @@ OTEL_ENDPOINT=https://api.lumoz.ai/proxy/v1/traces
 
 Tracing is optional. The app works with only `OPENAI_API_KEY` set.
 
+## Add Lumoz to Your Own LangGraph App
+
+> **Just want the instrumentation code?** → [INSTRUMENTATION.md](INSTRUMENTATION.md)
+>
+> Covers: exporter setup, `LangChainInstrumentor`, user/session tracking with `using_attributes`, root spans, graceful shutdown.
+
 ## Run
 
 ```bash
