@@ -1,0 +1,20 @@
+[project]
+name = "nate-scheduling-agent"
+version = "0.1.0"
+description = "Nate's scheduling agent for the A2A project."
+requires-python = ">=3.10"
+dependencies = [
+    "a2a-sdk>=1.0.3",
+    "crewai[tools]>=0.126.0",
+    "pydantic",
+    "python-dotenv>=1.0.0",
+    "uvicorn",
+    # OpenTelemetry / OpenInference for Lumoz observability
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "openinference-semantic-conventions>=0.1.0",
+    "openinference-instrumentation-crewai>=0.1.0",
+    "openinference-instrumentation-litellm>=0.1.0",
+    "sse-starlette>=3.4.4",
+] 
