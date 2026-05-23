@@ -138,6 +138,7 @@ class KaitlynAgent:
             checkpointer=memory,
             prompt=self.SYSTEM_INSTRUCTION,
             response_format=ResponseFormat,
+            name=self.__class__.__name__,
         )
 
     def invoke(self, query, context_id):
