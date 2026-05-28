@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from collections.abc import AsyncGenerator
 
@@ -43,16 +42,24 @@ class KarleyAgentExecutor(AgentExecutor):
     ) -> None:
         session_obj = await self._upsert_session(session_id)
         session_id = session_obj.id
+        final_response_sent = False
 
         async for event in self._run_agent(session_id, new_message):
             if event.is_final_response():
+                if final_response_sent:
+                    logger.debug("Ignoring duplicate final response event")
+                    continue
                 parts = convert_genai_parts_to_a2a(
                     event.content.parts if event.content and event.content.parts else []
                 )
                 logger.debug("Yielding final response: %s", parts)
                 await task_updater.add_artifact(parts)
                 await task_updater.complete()
-                break
+                final_response_sent = True
+                continue
+            if final_response_sent:
+                logger.debug("Ignoring post-completion event")
+                continue
             if not event.get_function_calls():
                 logger.debug("Yielding update response")
                 await task_updater.update_status(
