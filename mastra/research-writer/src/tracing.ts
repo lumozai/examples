@@ -1,7 +1,10 @@
-import { Observability } from "@mastra/observability";
-import { ArizeExporter } from "@mastra/arize";
+import { TenantExporters } from "./tenantExporters.js";
 
-let observability: Observability;
+const SERVICE_NAME = "mastra-research-writer";
+const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+
+let tenantExporters: TenantExporters;
 
 export function initTracing() {
   const otelEndpoint =
@@ -9,31 +12,11 @@ export function initTracing() {
     "https://tp9jv7tcq3.execute-api.us-east-1.amazonaws.com/dev/proxy/v1/traces";
   const apiKey = process.env.LUMOZ_API_KEY || "";
 
-  const headers: Record<string, string> = {
-    // Required so API Gateway decodes the binary protobuf response.
-    // REST API only base64-decodes isBase64Encoded Lambda responses when
-    // the request includes a matching Accept header.
-    "accept": "application/x-protobuf",
-  };
-  
-  if (apiKey) {
-    const encoded = Buffer.from(apiKey, "utf-8").toString("base64");
-    headers["authorization"] = `Basic ${encoded}`;
-  }
-
-  const arizeExporter = new ArizeExporter({
+  tenantExporters = new TenantExporters({
     endpoint: otelEndpoint,
-    headers,
-    logLevel: "debug",
-  });
-
-  observability = new Observability({
-    configs: {
-      default: {
-        serviceName: "mastra-research-writer",
-        exporters: [arizeExporter],
-      },
-    },
+    apiKey,
+    serviceName: SERVICE_NAME,
+    logLevel: getExporterLogLevel(),
   });
 
   console.log(`[tracing] Mastra observability with OpenInference enabled`);
@@ -41,11 +24,27 @@ export function initTracing() {
 }
 
 export function getObservability() {
-  return observability;
+  return tenantExporters.getObservability();
+}
+
+export function ensureTenantExporter(tenant_id: string) {
+  return tenantExporters.ensureTenantExporter(tenant_id);
+}
+
+export function createTenantRequestContext(tenant_id: string) {
+  return tenantExporters.createRequestContext(tenant_id);
 }
 
 export async function shutdown() {
-  if (observability) {
-    await observability.shutdown();
+  if (tenantExporters) {
+    await tenantExporters.shutdown();
   }
+}
+
+function getExporterLogLevel(): LogLevel {
+  const logLevel = process.env.LUMOZ_LOG_LEVEL?.toLowerCase();
+  if (LOG_LEVELS.includes(logLevel as LogLevel)) {
+    return logLevel as LogLevel;
+  }
+  return "error";
 }

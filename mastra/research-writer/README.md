@@ -66,7 +66,7 @@ npm install
 npm start
 ```
 
-The CLI will prompt for a user ID (defaults to `demo-user`) and start an interactive session. A knowledge base is seeded with sample documents on startup.
+The CLI will prompt for a user ID and `tenant_id`, then start an interactive session. The Lumoz key identifies the Lumoz tenant; each `tenant_id` gets its own OTLP exporter and batch queue so export requests are not mixed across tenants. A knowledge base is seeded with sample documents on startup.
 
 ### Commands
 
@@ -86,6 +86,7 @@ See [INSTRUMENTATION.md](INSTRUMENTATION.md) for full setup details, code snippe
 === Mastra Research-Writer Agent ===
 
 User: demo-user
+tenant_id: demo-tenant
 Session: a1b2c3d4-...
 
 [knowledge] Ingested 5 documents (5 chunks)

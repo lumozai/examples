@@ -2,7 +2,13 @@
 // any other module reads process.env (ESM hoists all imports).
 import "./env.js";
 
-import { initTracing, getObservability, shutdown } from "./tracing.js";
+import {
+  createTenantRequestContext,
+  ensureTenantExporter,
+  initTracing,
+  getObservability,
+  shutdown,
+} from "./tracing.js";
 
 // Initialize tracing before anything else
 initTracing();
@@ -46,17 +52,22 @@ async function seedKnowledgeBase() {
 
 async function runQuery(
   query: string,
+  tenant_id: string,
   userId: string,
   sessionId: string,
 ): Promise<string> {
+  ensureTenantExporter(tenant_id);
+  const requestContext = createTenantRequestContext(tenant_id);
+
   const workflow = mastra.getWorkflow("research-write");
   const run = await workflow.createRun();
   const result = await run.start({
     inputData: { query },
+    requestContext,
     tracingOptions: {
       metadata: {
-        "userId": userId,
-        "threadId": sessionId,
+        userId,
+        threadId: sessionId,
       },
     },
   });
@@ -89,9 +100,16 @@ async function main() {
     (
       await prompt("Enter your user ID (or press Enter for 'demo-user'): ")
     ).trim() || "demo-user";
+  const tenant_id =
+    (
+      await prompt(
+        "Enter tenant_id (or press Enter for 'demo-tenant'): ",
+      )
+    ).trim() || "demo-tenant";
   const sessionId = randomUUID();
 
   console.log(`\nUser: ${userId}`);
+  console.log(`tenant_id: ${tenant_id}`);
   console.log(`Session: ${sessionId}\n`);
 
   await seedKnowledgeBase();
@@ -127,7 +145,12 @@ async function main() {
 
     try {
       console.log("\n[researching...]");
-      const response = await runQuery(trimmed, userId, sessionId);
+      const response = await runQuery(
+        trimmed,
+        tenant_id,
+        userId,
+        sessionId,
+      );
       console.log(`\nAgent: ${response}\n`);
     } catch (err) {
       console.error(

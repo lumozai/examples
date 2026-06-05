@@ -12,51 +12,40 @@ npm install @mastra/observability @mastra/arize \
 
 ## 1. Configure the Exporter
 
-Create a tracing module that initializes the OpenTelemetry exporter with your Lumoz API key.
+Create a tracing module that initializes tenant exporters with your Lumoz API key. The utility class in [`src/tenantExporters.ts`](src/tenantExporters.ts) owns the per-tenant exporter registry.
 
 See [`src/tracing.ts`](src/tracing.ts) for the full implementation.
 
 ```typescript
-import { Observability } from "@mastra/observability";
-import { ArizeExporter } from "@mastra/arize";
+import { TenantExporters } from "./tenantExporters.js";
 
-let observability: Observability;
+const SERVICE_NAME = "mastra-research-writer";
+let tenantExporters: TenantExporters;
 
 export function initTracing() {
-  const otelEndpoint = process.env.OTEL_ENDPOINT || "https://api.lumoz.ai/proxy/v1/traces";
-  const apiKey = process.env.LUMOZ_API_KEY || "";
-
-  const headers: Record<string, string> = {
-    accept: "application/x-protobuf",
-  };
-
-  if (apiKey) {
-    const encoded = Buffer.from(apiKey, "utf-8").toString("base64");
-    headers["authorization"] = `Basic ${encoded}`;
-  }
-
-  const arizeExporter = new ArizeExporter({
-    endpoint: otelEndpoint,
-    headers,
-  });
-
-  observability = new Observability({
-    configs: {
-      default: {
-        serviceName: "mastra-research-writer",
-        exporters: [arizeExporter],
-      },
-    },
+  tenantExporters = new TenantExporters({
+    endpoint: process.env.OTEL_ENDPOINT || "https://api.lumoz.ai/proxy/v1/traces",
+    apiKey: process.env.LUMOZ_API_KEY || "",
+    serviceName: SERVICE_NAME,
+    logLevel: "error",
   });
 }
 
 export function getObservability() {
-  return observability;
+  return tenantExporters.getObservability();
+}
+
+export function ensureTenantExporter(tenant_id: string) {
+  return tenantExporters.ensureTenantExporter(tenant_id);
+}
+
+export function createTenantRequestContext(tenant_id: string) {
+  return tenantExporters.createRequestContext(tenant_id);
 }
 
 export async function shutdown() {
-  if (observability) {
-    await observability.shutdown();
+  if (tenantExporters) {
+    await tenantExporters.shutdown();
   }
 }
 ```
@@ -88,23 +77,38 @@ const mastra = new Mastra({
 });
 ```
 
-## 3. User and Session Tracking
+## 3. Tenant Exporters
 
-Pass `userId` and `threadId` via `tracingOptions.metadata` when starting a workflow run. Lumoz uses these to group traces by user and session in the console.
+For a true multi-tenant agent service, do not use one global exporter with one tenant header. OTLP exporters batch spans, so one export request can contain spans from multiple app requests.
+
+Instead, create one exporter and batch queue per `tenant_id`. The Lumoz API key identifies the Lumoz tenant, and `x-lumoz-subtenant-id` carries the customer's `tenant_id` value for Lumoz to map to its internal subtenant ID before storing traces. Mastra's `configSelector` chooses the correct observability instance from validated `requestContext` before the root span is created.
+
+## 4. User and Session Tracking
+
+After validating `tenant_id` at request ingress, ensure the tenant exporter exists and pass `tenant_id` through `requestContext`. Pass `userId` and `threadId` via `tracingOptions.metadata` for trace grouping in the console.
 
 ```typescript
 import { randomUUID } from "node:crypto";
+import {
+  createTenantRequestContext,
+  ensureTenantExporter,
+} from "./tracing.js";
 
 const userId = "user-123";
+const tenant_id = "demo-tenant";
 const sessionId = randomUUID();
+
+ensureTenantExporter(tenant_id);
+const requestContext = createTenantRequestContext(tenant_id);
 
 const workflow = mastra.getWorkflow("research-write");
 const run = await workflow.createRun();
 const result = await run.start({
   inputData: { query: "Tell me about AI agents" },
+  requestContext,
   tracingOptions: {
     metadata: {
-      userId: userId,
+      userId,
       threadId: sessionId,
     },
   },
@@ -113,7 +117,57 @@ const result = await run.start({
 
 These appear as `user.id` and `session.id` attributes on the root span and propagate to all child spans.
 
-## 4. Passing Trace Context to Agents
+## 5. Server Request Handling
+
+In a server, initialize Mastra and tracing once at process startup. For each incoming request, resolve and validate `tenant_id`, ensure its exporter exists, create a request context, then start a new workflow run.
+
+```typescript
+app.post("/agent", async (req, res) => {
+  const tenant_id = validateTenantId(req.headers["x-tenant-id"]);
+  const userId = req.user.id;
+  const threadId = req.body.sessionId;
+
+  ensureTenantExporter(tenant_id);
+  const requestContext = createTenantRequestContext(tenant_id);
+
+  const workflow = mastra.getWorkflow("research-write");
+  const run = await workflow.createRun();
+  const result = await run.start({
+    inputData: { query: req.body.query },
+    requestContext,
+    tracingOptions: {
+      metadata: {
+        userId,
+        threadId,
+      },
+    },
+  });
+
+  res.json(result);
+});
+```
+
+`run.start()` is per request/workflow execution. The Mastra instance and tenant exporters are process-scoped.
+
+## 6. Inspecting OTLP Headers
+
+To verify that the custom subtenant header is sent, run the sample with:
+
+```bash
+LUMOZ_PRINT_OTEL_HEADERS=true npm start
+```
+
+When a tenant exporter is created, the sample prints the OTLP headers with `authorization` redacted:
+
+```text
+[tracing] OTLP headers {
+  accept: 'application/x-protobuf',
+  authorization: 'REDACTED',
+  'x-lumoz-subtenant-id': 'demo-tenant'
+}
+```
+
+## 7. Passing Trace Context to Agents
 
 When using workflows with multiple steps, pass `tracing` and `tracingContext` from the step execution context to each agent's `generate()` call. This connects all agent calls, tool executions, and LLM spans under a single trace.
 
@@ -137,7 +191,7 @@ const researchStep = createStep({
 
 **Without `{ tracing, tracingContext }`**, agent spans appear as separate disconnected traces instead of being nested under the workflow.
 
-## 5. Graceful Shutdown
+## 8. Graceful Shutdown
 
 Always flush pending spans before the process exits to avoid losing trace data:
 
@@ -184,4 +238,5 @@ invoke_workflow research-write          (WORKFLOW)
 OPENAI_API_KEY=sk-...
 LUMOZ_API_KEY=client_id:client_secret
 OTEL_ENDPOINT=https://api.lumoz.ai/proxy/v1/traces
+LUMOZ_PRINT_OTEL_HEADERS=false
 ```
