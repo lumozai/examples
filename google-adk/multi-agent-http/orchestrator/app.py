@@ -11,7 +11,6 @@ from typing import Any
 
 import requests
 from fastapi import FastAPI, HTTPException
-from opentelemetry import propagate, trace
 from pydantic import BaseModel, Field
 
 from google.adk.agents import LlmAgent
@@ -125,29 +124,19 @@ def ask_remote_city_expert(
         },
     }
 
-    headers: dict[str, str] = {}
-    propagate.inject(headers)
-
-    tracer = trace.get_tracer("orchestrator")
-    with tracer.start_as_current_span("ask_remote_city_expert") as span:
-        span.set_attribute("http.url", remote_url)
-        span.set_attribute("travel.destination", destination)
-        span.set_attribute("travel.days", days)
-        try:
-            response = requests.post(remote_url, json=payload, headers=headers, timeout=60)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as exc:
-            span.record_exception(exc)
-            span.set_attribute("error.type", type(exc).__name__)
-            error_body = getattr(exc.response, "text", "") if getattr(exc, "response", None) else ""
-            return {
-                "error": "remote_city_expert_unavailable",
-                "remote_url": remote_url,
-                "details": str(exc),
-                "response_body": error_body[:1000],
-                "recovery_hint": "Start the remote city expert service with: cd remote_city_expert && uv run python app.py",
-            }
+    try:
+        response = requests.post(remote_url, json=payload, timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as exc:
+        error_body = getattr(exc.response, "text", "") if getattr(exc, "response", None) else ""
+        return {
+            "error": "remote_city_expert_unavailable",
+            "remote_url": remote_url,
+            "details": str(exc),
+            "response_body": error_body[:1000],
+            "recovery_hint": "Start the remote city expert service with: cd remote_city_expert && uv run python app.py",
+        }
 
 
 orchestrator_agent = LlmAgent(

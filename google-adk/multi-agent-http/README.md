@@ -144,7 +144,7 @@ curl -X POST http://localhost:8001/recommend \
 
 ## Lumoz Tracing
 
-Both services call `instrument_fastapi_app`, which installs FastAPI server tracing and OpenInference ADK/LLM tracing. The orchestrator also calls `instrument_requests`, and the `ask_remote_city_expert` tool injects W3C trace headers into the outbound HTTP request.
+Both services call `instrument_fastapi_app`, which installs FastAPI server tracing and OpenInference ADK/LLM tracing. The orchestrator also calls `instrument_requests`, so the `requests.post` call in `ask_remote_city_expert` automatically creates an HTTP client span and injects W3C trace headers into the outbound request.
 
 Expected trace shape:
 
