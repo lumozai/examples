@@ -1,0 +1,12 @@
+[project]
+name = "multi-agent-http-client"
+version = "0.1.0"
+description = "Terminal client for the ADK multi-agent HTTP travel planner example."
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "requests>=2.32.0",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,23 @@
+[project]
+name = "remote-city-expert"
+version = "0.1.0"
+description = "FastAPI ADK remote city expert agent for the multi-agent HTTP travel planner example."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "google-adk>=1.0.0",
+    "litellm>=1.0.0",
+    "openinference-instrumentation-google-adk>=0.1.0",
+    "openinference-instrumentation-litellm>=0.1.0",
+    "openinference-instrumentation-openai>=0.1.0",
+    "openai>=1.0.0",
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-sdk>=1.28.0",
+    "python-dotenv>=1.0.0",
+    "uvicorn[standard]>=0.30.0",
+]
+
+[tool.uv]
+package = false
