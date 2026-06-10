@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import uuid
 from pathlib import Path
 
 import requests
@@ -24,18 +23,14 @@ def parse_args() -> argparse.Namespace:
         help="Orchestrator /chat endpoint.",
     )
     parser.add_argument("--user-id", default="demo_user")
-    parser.add_argument(
-        "--session-id",
-        default=f"demo_session_{uuid.uuid4().hex[:8]}",
-        help="Session id for multi-turn chat.",
-    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    session_id: str | None = None
+
     print(f"Chatting with {args.url}")
-    print(f"Session: {args.session_id}")
     print("Type 'quit' or press Ctrl-D to exit.\n")
 
     while True:
@@ -50,15 +45,11 @@ def main() -> None:
         if message.lower() in {"quit", "exit"}:
             return
 
-        response = requests.post(
-            args.url,
-            json={
-                "user_id": args.user_id,
-                "session_id": args.session_id,
-                "message": message,
-            },
-            timeout=120,
-        )
+        payload: dict = {"user_id": args.user_id, "message": message}
+        if session_id:
+            payload["session_id"] = session_id
+
+        response = requests.post(args.url, json=payload, timeout=120)
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
@@ -69,7 +60,11 @@ def main() -> None:
                 print(response.text)
             print()
             continue
+
         body = response.json()
+        session_id = body.get("session_id", session_id)
+        if not payload.get("session_id"):
+            print(f"Session: {session_id}")
         print(f"\nAssistant: {body.get('answer', '')}\n")
 
 

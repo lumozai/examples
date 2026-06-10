@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 
 from google.adk.agents import LlmAgent
@@ -15,6 +16,7 @@ from google.genai import types
 class AgentRunResult:
     text: str
     messages: list[str]
+    session_id: str
 
 
 class AgentRuntime:
@@ -28,26 +30,28 @@ class AgentRuntime:
             app_name=app_name,
             session_service=self.session_service,
         )
-        self._session_ids: set[tuple[str, str]] = set()
+        self._session_user: dict[str, str] = {}  # session_id -> user_id
         self._lock = asyncio.Lock()
 
-    async def _ensure_session(self, user_id: str, session_id: str) -> None:
-        session_key = (user_id, session_id)
-        if session_key in self._session_ids:
-            return
+    async def _create_session(self, user_id: str, session_id: str) -> None:
+        await self.session_service.create_session(
+            app_name=self.app_name,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        self._session_user[session_id] = user_id
 
+    async def get_or_create_session(self, user_id: str, session_id: str | None) -> str:
+        if session_id and session_id in self._session_user:
+            return session_id
         async with self._lock:
-            if session_key in self._session_ids:
-                return
-            await self.session_service.create_session(
-                app_name=self.app_name,
-                user_id=user_id,
-                session_id=session_id,
-            )
-            self._session_ids.add(session_key)
+            new_id = session_id or str(uuid.uuid4())
+            if new_id not in self._session_user:
+                await self._create_session(user_id=user_id, session_id=new_id)
+        return new_id
 
-    async def run(self, message: str, user_id: str, session_id: str) -> AgentRunResult:
-        await self._ensure_session(user_id=user_id, session_id=session_id)
+    async def run(self, message: str, user_id: str, session_id: str | None = None) -> AgentRunResult:
+        session_id = await self.get_or_create_session(user_id=user_id, session_id=session_id)
 
         messages: list[str] = []
         async for event in self.runner.run_async(
@@ -70,4 +74,5 @@ class AgentRuntime:
         return AgentRunResult(
             text=messages[-1] if messages else "",
             messages=messages,
+            session_id=session_id,
         )

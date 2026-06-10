@@ -172,13 +172,14 @@ instrument_fastapi_app(app, service_name="travel-orchestrator")
 class ChatRequest(BaseModel):
     message: str
     user_id: str = "demo_user"
-    session_id: str = "demo_session"
+    session_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatResponse(BaseModel):
     answer: str
     messages: list[str]
+    session_id: str
     agent: str = "travel_orchestrator"
 
 
@@ -189,18 +190,17 @@ def health() -> dict[str, str]:
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    set_span_attributes(
-        {
-            "chat.user_id": request.user_id,
-            "chat.session_id": request.session_id,
-            "agent.name": "travel_orchestrator",
-        }
-    )
-
     if request.metadata:
         message = f"{request.message}\n\nClient metadata: {json.dumps(request.metadata)}"
     else:
         message = request.message
+
+    set_span_attributes(
+        {
+            "user.id": request.user_id,
+            "session.id": request.session_id,
+        }
+    )
 
     try:
         result = await runtime.run(
@@ -218,7 +218,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 "message": str(exc),
             },
         ) from exc
-    return ChatResponse(answer=result.text, messages=result.messages)
+    return ChatResponse(answer=result.text, messages=result.messages, session_id=result.session_id)
 
 
 if __name__ == "__main__":
