@@ -1,0 +1,160 @@
+#!/bin/bash
+# Subtenant management CLI — covers all /admin/subtenants endpoints:
+#   create   POST   /admin/subtenants
+#   list     GET    /admin/subtenants
+#   disable  POST   /admin/subtenants/{id}/disable
+#   delete   DELETE /admin/subtenants/{id}
+#
+# Auth: JWT Bearer — read from .auth-token (a tenant org admin's session JWT).
+#
+# Base URL: LUMOZ_API_URL (default http://localhost:3001)
+#
+# Usage:
+#   ./subtenant create --id acme-corp --email owner@acme.example.com \
+#       [--display-name "Acme Corp"] [--first-name Ada] [--last-name Lovelace] \
+#       [--phone +15551234567] [--address-street ...] [--address-street2 ...] \
+#       [--city ...] [--state ...] [--zip ...] [--country ...] \
+#       [--domains acme.com,acme.io] [--slug acme] [--metadata '{"tier":"pro"}'] \
+#       [--idempotency-key abc123]
+#   ./subtenant list [--status provisioning|active|disabled|deleted|failed] [--limit 100]
+#   ./subtenant disable <subtenant_id>          (or --id <subtenant_id>)
+#   ./subtenant delete  <subtenant_id>          (or --id <subtenant_id>)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_URL="${LUMOZ_API_URL:-http://localhost:3001}"
+TOKEN_FILE="$SCRIPT_DIR/.auth-token"
+
+usage() {
+  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-1}"
+}
+
+# ---- auth header --------------------------------------------------------------
+AUTH_HEADER=""
+build_auth() {
+  [[ -f "$TOKEN_FILE" ]] || { echo "ERROR: no $TOKEN_FILE." >&2;
+    echo "Paste a fresh JWT (DevTools > Network > Authorization header, without 'Bearer ') into .auth-token." >&2; exit 1; }
+  local token; token=$(tr -d '\n\r' < "$TOKEN_FILE")
+  [[ -n "$token" ]] || { echo "ERROR: $TOKEN_FILE is empty." >&2; exit 1; }
+  AUTH_HEADER="Authorization: Bearer $token"
+}
+
+# ---- request helper -----------------------------------------------------------
+# request METHOD PATH [BODY] [EXTRA_HEADER]
+request() {
+  local method=$1 path=$2 body=${3:-} extra=${4:-}
+  local url="${BASE_URL}${path}"
+  echo ">>> $method $url" >&2
+  local args=(-s -w '\n---HTTP_CODE:%{http_code}---' -X "$method" -H "$AUTH_HEADER" -H "Content-Type: application/json")
+  [[ -n "$extra" ]] && args+=(-H "$extra")
+  [[ -n "$body" ]] && args+=(-d "$body")
+  local resp; resp=$(curl "${args[@]}" "$url")
+  local code; code=$(printf '%s' "$resp" | tail -1 | sed 's/.*---HTTP_CODE:\([0-9]*\)---/\1/')
+  local out;  out=$(printf '%s' "$resp" | sed '$d')
+  if command -v jq >/dev/null 2>&1; then printf '%s' "$out" | jq . 2>/dev/null || printf '%s\n' "$out"; else printf '%s\n' "$out"; fi
+  echo "<<< HTTP $code" >&2
+  [[ "$code" =~ ^2 ]] || return 1
+}
+
+# urlencode a path segment (handles ids containing : . etc. safely)
+encode() { python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+
+# ---- subcommands --------------------------------------------------------------
+cmd_create() {
+  local id="" email="" display="" first="" last="" domains="" slug="" metadata="" idem=""
+  local phone="" street="" street2="" city="" state="" zip="" country=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id=$2; shift 2;;
+      --email) email=$2; shift 2;;
+      --display-name) display=$2; shift 2;;
+      --first-name) first=$2; shift 2;;
+      --last-name) last=$2; shift 2;;
+      --phone) phone=$2; shift 2;;
+      --address-street) street=$2; shift 2;;
+      --address-street2) street2=$2; shift 2;;
+      --city) city=$2; shift 2;;
+      --state) state=$2; shift 2;;
+      --zip) zip=$2; shift 2;;
+      --country) country=$2; shift 2;;
+      --domains) domains=$2; shift 2;;
+      --slug) slug=$2; shift 2;;
+      --metadata) metadata=$2; shift 2;;
+      --idempotency-key) idem=$2; shift 2;;
+      -h|--help) usage 0;;
+      *) echo "ERROR: unknown create arg: $1" >&2; usage;;
+    esac
+  done
+  [[ -n "$id" && -n "$email" ]] || { echo "ERROR: create requires --id and --email" >&2; exit 1; }
+  local body
+  body=$(ID="$id" EMAIL="$email" DISPLAY="$display" FIRST="$first" LAST="$last" \
+         PHONE="$phone" STREET="$street" STREET2="$street2" CITY="$city" STATE="$state" \
+         ZIP="$zip" COUNTRY="$country" DOMAINS="$domains" SLUG="$slug" METADATA="$metadata" python3 -c '
+import os, json
+b = {"subtenant_id": os.environ["ID"], "email": os.environ["EMAIL"]}
+for key, env in (("display_name","DISPLAY"),("first_name","FIRST"),("last_name","LAST"),
+                 ("phone","PHONE"),("address_street","STREET"),("address_street2","STREET2"),
+                 ("address_city","CITY"),("address_state","STATE"),("address_zip_code","ZIP"),
+                 ("address_country","COUNTRY"),("organization_slug","SLUG")):
+    v = os.environ.get(env, "")
+    if v:
+        b[key] = v
+d = os.environ.get("DOMAINS", "")
+if d:
+    b["email_allowed_domains"] = [x.strip() for x in d.split(",") if x.strip()]
+m = os.environ.get("METADATA", "")
+if m:
+    b["metadata"] = json.loads(m)
+print(json.dumps(b))
+')
+  local extra=""
+  [[ -n "$idem" ]] && extra="Idempotency-Key: $idem"
+  request POST /admin/subtenants "$body" "$extra"
+}
+
+cmd_list() {
+  local status="" limit="" qs=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --status) status=$2; shift 2;;
+      --limit) limit=$2; shift 2;;
+      -h|--help) usage 0;;
+      *) echo "ERROR: unknown list arg: $1" >&2; usage;;
+    esac
+  done
+  [[ -n "$status" ]] && qs="status=$(encode "$status")"
+  [[ -n "$limit" ]]  && qs="${qs:+$qs&}limit=$(encode "$limit")"
+  request GET "/admin/subtenants${qs:+?$qs}"
+}
+
+# shared id resolver for disable/delete: accepts positional or --id
+resolve_id() {
+  local id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id) id=$2; shift 2;;
+      -h|--help) usage 0;;
+      -*) echo "ERROR: unknown arg: $1" >&2; usage;;
+      *) id=$1; shift;;
+    esac
+  done
+  [[ -n "$id" ]] || { echo "ERROR: subtenant_id required (positional or --id)" >&2; exit 1; }
+  printf '%s' "$id"
+}
+
+cmd_disable() { local id; id=$(resolve_id "$@"); request POST "/admin/subtenants/$(encode "$id")/disable"; }
+cmd_delete()  { local id; id=$(resolve_id "$@"); request DELETE "/admin/subtenants/$(encode "$id")"; }
+
+# ---- dispatch -----------------------------------------------------------------
+[[ $# -ge 1 ]] || usage
+sub=$1; shift || true
+case "$sub" in
+  create)  build_auth; cmd_create "$@";;
+  list)    build_auth; cmd_list "$@";;
+  disable) build_auth; cmd_disable "$@";;
+  delete)  build_auth; cmd_delete "$@";;
+  -h|--help|help) usage 0;;
+  *) echo "ERROR: unknown command: $sub" >&2; usage;;
+esac
