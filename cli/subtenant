@@ -7,15 +7,14 @@
 #
 # Auth: JWT Bearer — read from .auth-token (a tenant org admin's session JWT).
 #
-# Base URL: LUMOZ_API_URL (default http://localhost:3001)
+# Base URL: LUMOZ_API_URL (default https://api.lumoz.ai)
 #
 # Usage:
 #   ./subtenant create --id acme-corp --email owner@acme.example.com \
 #       [--display-name "Acme Corp"] [--first-name Ada] [--last-name Lovelace] \
 #       [--phone +15551234567] [--address-street ...] [--address-street2 ...] \
 #       [--city ...] [--state ...] [--zip ...] [--country ...] \
-#       [--domains acme.com,acme.io] [--slug acme] [--metadata '{"tier":"pro"}'] \
-#       [--idempotency-key abc123]
+#       [--domains acme.com,acme.io] [--slug acme] [--metadata '{"tier":"pro"}']
 #   ./subtenant list [--status provisioning|active|disabled|deleted|failed] [--limit 100]
 #   ./subtenant disable <subtenant_id>          (or --id <subtenant_id>)
 #   ./subtenant delete  <subtenant_id>          (or --id <subtenant_id>)
@@ -23,11 +22,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_URL="${LUMOZ_API_URL:-http://localhost:3001}"
+BASE_URL="${LUMOZ_API_URL:-https://api.lumoz.ai}"
 TOKEN_FILE="$SCRIPT_DIR/.auth-token"
 
 usage() {
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 
@@ -63,7 +62,7 @@ encode() { python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv
 
 # ---- subcommands --------------------------------------------------------------
 cmd_create() {
-  local id="" email="" display="" first="" last="" domains="" slug="" metadata="" idem=""
+  local id="" email="" display="" first="" last="" domains="" slug="" metadata=""
   local phone="" street="" street2="" city="" state="" zip="" country=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -82,7 +81,6 @@ cmd_create() {
       --domains) domains=$2; shift 2;;
       --slug) slug=$2; shift 2;;
       --metadata) metadata=$2; shift 2;;
-      --idempotency-key) idem=$2; shift 2;;
       -h|--help) usage 0;;
       *) echo "ERROR: unknown create arg: $1" >&2; usage;;
     esac
@@ -109,9 +107,7 @@ if m:
     b["metadata"] = json.loads(m)
 print(json.dumps(b))
 ')
-  local extra=""
-  [[ -n "$idem" ]] && extra="Idempotency-Key: $idem"
-  request POST /admin/subtenants "$body" "$extra"
+  request POST /admin/subtenants "$body"
 }
 
 cmd_list() {
