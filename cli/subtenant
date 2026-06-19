@@ -1,23 +1,36 @@
 #!/bin/bash
 # Subtenant management CLI — covers all /admin/subtenants endpoints:
-#   create   POST   /admin/subtenants
-#   list     GET    /admin/subtenants
-#   disable  POST   /admin/subtenants/{id}/disable
-#   delete   DELETE /admin/subtenants/{id}
+#   create     POST   /admin/subtenants                       (org only, no users)
+#   add-user   POST   /admin/subtenants/{id}/users
+#   list-users GET    /admin/subtenants/{id}/users
+#   del-user   DELETE /admin/subtenants/{id}/users/{user_id}
+#   list       GET    /admin/subtenants
+#   disable    POST   /admin/subtenants/{id}/disable
+#   enable     POST   /admin/subtenants/{id}/enable
+#   delete     DELETE /admin/subtenants/{id}
 #
-# Auth: JWT Bearer — read from .auth-token (a tenant org admin's session JWT).
+# Auth (dual model, matches the API):
+#   M2M Basic — set LUMOZ_API_KEY="<client_id>:<client_secret>" (the Lumoz key, both halves
+#               joined by ':'; preferred when set). Needs write:subtenants (create/add-user/
+#               del-user/disable/enable/delete) or read:subtenants (list/list-users).
+#   JWT Bearer — read from .auth-token (a tenant org admin's session JWT). Used when
+#               LUMOZ_API_KEY is not set.
 #
 # Base URL: LUMOZ_API_URL (default https://api.lumoz.ai)
 #
 # Usage:
-#   ./subtenant create --id acme-corp --email owner@acme.example.com \
-#       [--display-name "Acme Corp"] [--first-name Ada] [--last-name Lovelace] \
+#   ./subtenant create --subtenant-id acme-corp --domain acme.com \
+#       [--display-name "Acme Corp"] [--slug acme] \
 #       [--phone +15551234567] [--address-street ...] [--address-street2 ...] \
-#       [--city ...] [--state ...] [--zip ...] [--country ...] \
-#       [--domains acme.com,acme.io] [--slug acme] [--metadata '{"tier":"pro"}']
+#       [--city ...] [--state ...] [--zip ...] [--country ...]
+#   ./subtenant add-user <subtenant_id> --email owner@acme.com [--role admin|member] \
+#       [--first-name Ada] [--last-name Lovelace] [--phone +15551234567]
+#   ./subtenant list-users <subtenant_id>
+#   ./subtenant del-user <subtenant_id> <user_id>
 #   ./subtenant list [--status provisioning|active|disabled|deleted|failed] [--limit 100]
-#   ./subtenant disable <subtenant_id>          (or --id <subtenant_id>)
-#   ./subtenant delete  <subtenant_id>          (or --id <subtenant_id>)
+#   ./subtenant disable <subtenant_id>          (or --subtenant-id <subtenant_id>)
+#   ./subtenant enable  <subtenant_id>          (or --subtenant-id <subtenant_id>)
+#   ./subtenant delete  <subtenant_id>          (or --subtenant-id <subtenant_id>)
 
 set -euo pipefail
 
@@ -26,15 +39,23 @@ BASE_URL="${LUMOZ_API_URL:-https://api.lumoz.ai}"
 TOKEN_FILE="$SCRIPT_DIR/.auth-token"
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 
 # ---- auth header --------------------------------------------------------------
+# Prefer M2M Basic auth when LUMOZ_API_KEY ("<client_id>:<secret>") is set; else fall back to JWT.
 AUTH_HEADER=""
 build_auth() {
-  [[ -f "$TOKEN_FILE" ]] || { echo "ERROR: no $TOKEN_FILE." >&2;
-    echo "Paste a fresh JWT (DevTools > Network > Authorization header, without 'Bearer ') into .auth-token." >&2; exit 1; }
+  if [[ -n "${LUMOZ_API_KEY:-}" ]]; then
+    [[ "$LUMOZ_API_KEY" == *:* ]] || { echo "ERROR: LUMOZ_API_KEY must be '<client_id>:<client_secret>'." >&2; exit 1; }
+    local basic; basic=$(printf '%s' "$LUMOZ_API_KEY" | base64 | tr -d '\n')
+    AUTH_HEADER="Authorization: Basic $basic"
+    return
+  fi
+  [[ -f "$TOKEN_FILE" ]] || { echo "ERROR: no LUMOZ_API_KEY and no $TOKEN_FILE." >&2;
+    echo "Set LUMOZ_API_KEY=\"<client_id>:<client_secret>\", or paste a fresh JWT" >&2;
+    echo "(DevTools > Network > Authorization header, without 'Bearer ') into .auth-token." >&2; exit 1; }
   local token; token=$(tr -d '\n\r' < "$TOKEN_FILE")
   [[ -n "$token" ]] || { echo "ERROR: $TOKEN_FILE is empty." >&2; exit 1; }
   AUTH_HEADER="Authorization: Bearer $token"
@@ -62,15 +83,14 @@ encode() { python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv
 
 # ---- subcommands --------------------------------------------------------------
 cmd_create() {
-  local id="" email="" display="" first="" last="" domains="" slug="" metadata=""
+  local id="" domain="" display="" slug=""
   local phone="" street="" street2="" city="" state="" zip="" country=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --id) id=$2; shift 2;;
-      --email) email=$2; shift 2;;
+      --subtenant-id) id=$2; shift 2;;
+      --domain) domain=$2; shift 2;;
       --display-name) display=$2; shift 2;;
-      --first-name) first=$2; shift 2;;
-      --last-name) last=$2; shift 2;;
+      --slug) slug=$2; shift 2;;
       --phone) phone=$2; shift 2;;
       --address-street) street=$2; shift 2;;
       --address-street2) street2=$2; shift 2;;
@@ -78,36 +98,73 @@ cmd_create() {
       --state) state=$2; shift 2;;
       --zip) zip=$2; shift 2;;
       --country) country=$2; shift 2;;
-      --domains) domains=$2; shift 2;;
-      --slug) slug=$2; shift 2;;
-      --metadata) metadata=$2; shift 2;;
       -h|--help) usage 0;;
       *) echo "ERROR: unknown create arg: $1" >&2; usage;;
     esac
   done
-  [[ -n "$id" && -n "$email" ]] || { echo "ERROR: create requires --id and --email" >&2; exit 1; }
+  [[ -n "$id" && -n "$domain" ]] || { echo "ERROR: create requires --subtenant-id and --domain" >&2; exit 1; }
   local body
-  body=$(ID="$id" EMAIL="$email" DISPLAY="$display" FIRST="$first" LAST="$last" \
+  body=$(ID="$id" DOMAIN="$domain" DISPLAY="$display" SLUG="$slug" \
          PHONE="$phone" STREET="$street" STREET2="$street2" CITY="$city" STATE="$state" \
-         ZIP="$zip" COUNTRY="$country" DOMAINS="$domains" SLUG="$slug" METADATA="$metadata" python3 -c '
+         ZIP="$zip" COUNTRY="$country" python3 -c '
 import os, json
-b = {"subtenant_id": os.environ["ID"], "email": os.environ["EMAIL"]}
-for key, env in (("display_name","DISPLAY"),("first_name","FIRST"),("last_name","LAST"),
+b = {"subtenant_id": os.environ["ID"], "domain": os.environ["DOMAIN"]}
+for key, env in (("display_name","DISPLAY"),("organization_slug","SLUG"),
                  ("phone","PHONE"),("address_street","STREET"),("address_street2","STREET2"),
                  ("address_city","CITY"),("address_state","STATE"),("address_zip_code","ZIP"),
-                 ("address_country","COUNTRY"),("organization_slug","SLUG")):
+                 ("address_country","COUNTRY")):
     v = os.environ.get(env, "")
     if v:
         b[key] = v
-d = os.environ.get("DOMAINS", "")
-if d:
-    b["email_allowed_domains"] = [x.strip() for x in d.split(",") if x.strip()]
-m = os.environ.get("METADATA", "")
-if m:
-    b["metadata"] = json.loads(m)
 print(json.dumps(b))
 ')
   request POST /admin/subtenants "$body"
+}
+
+cmd_add_user() {
+  local id="" email="" role="" first="" last="" phone=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --email) email=$2; shift 2;;
+      --role) role=$2; shift 2;;
+      --first-name) first=$2; shift 2;;
+      --last-name) last=$2; shift 2;;
+      --phone) phone=$2; shift 2;;
+      --subtenant-id) id=$2; shift 2;;
+      -h|--help) usage 0;;
+      -*) echo "ERROR: unknown add-user arg: $1" >&2; usage;;
+      *) id=$1; shift;;
+    esac
+  done
+  [[ -n "$id" && -n "$email" ]] || { echo "ERROR: add-user requires <subtenant_id> and --email" >&2; exit 1; }
+  local body
+  body=$(EMAIL="$email" ROLE="$role" FIRST="$first" LAST="$last" PHONE="$phone" python3 -c '
+import os, json
+b = {"email": os.environ["EMAIL"]}
+for key, env in (("role","ROLE"),("first_name","FIRST"),("last_name","LAST"),("phone","PHONE")):
+    v = os.environ.get(env, "")
+    if v:
+        b[key] = v
+print(json.dumps(b))
+')
+  request POST "/admin/subtenants/$(encode "$id")/users" "$body"
+}
+
+cmd_list_users() { local id; id=$(resolve_id "$@"); request GET "/admin/subtenants/$(encode "$id")/users"; }
+
+cmd_del_user() {
+  local id="" user_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --subtenant-id) id=$2; shift 2;;
+      --user-id) user_id=$2; shift 2;;
+      -h|--help) usage 0;;
+      -*) echo "ERROR: unknown del-user arg: $1" >&2; usage;;
+      *) if [[ -z "$id" ]]; then id=$1; else user_id=$1; fi; shift;;
+    esac
+  done
+  [[ -n "$id" && -n "$user_id" ]] || { echo "ERROR: del-user requires <subtenant_id> <user_id>" >&2; exit 1; }
+  request DELETE "/admin/subtenants/$(encode "$id")/users/$(encode "$user_id")"
 }
 
 cmd_list() {
@@ -125,32 +182,37 @@ cmd_list() {
   request GET "/admin/subtenants${qs:+?$qs}"
 }
 
-# shared id resolver for disable/delete: accepts positional or --id
+# shared id resolver for disable/enable/delete/list-users: accepts positional or --subtenant-id
 resolve_id() {
   local id=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --id) id=$2; shift 2;;
+      --subtenant-id) id=$2; shift 2;;
       -h|--help) usage 0;;
       -*) echo "ERROR: unknown arg: $1" >&2; usage;;
       *) id=$1; shift;;
     esac
   done
-  [[ -n "$id" ]] || { echo "ERROR: subtenant_id required (positional or --id)" >&2; exit 1; }
+  [[ -n "$id" ]] || { echo "ERROR: subtenant_id required (positional or --subtenant-id)" >&2; exit 1; }
   printf '%s' "$id"
 }
 
 cmd_disable() { local id; id=$(resolve_id "$@"); request POST "/admin/subtenants/$(encode "$id")/disable"; }
+cmd_enable()  { local id; id=$(resolve_id "$@"); request POST "/admin/subtenants/$(encode "$id")/enable"; }
 cmd_delete()  { local id; id=$(resolve_id "$@"); request DELETE "/admin/subtenants/$(encode "$id")"; }
 
 # ---- dispatch -----------------------------------------------------------------
 [[ $# -ge 1 ]] || usage
 sub=$1; shift || true
 case "$sub" in
-  create)  build_auth; cmd_create "$@";;
-  list)    build_auth; cmd_list "$@";;
-  disable) build_auth; cmd_disable "$@";;
-  delete)  build_auth; cmd_delete "$@";;
+  create)     build_auth; cmd_create "$@";;
+  add-user)   build_auth; cmd_add_user "$@";;
+  list-users) build_auth; cmd_list_users "$@";;
+  del-user)   build_auth; cmd_del_user "$@";;
+  list)       build_auth; cmd_list "$@";;
+  disable)    build_auth; cmd_disable "$@";;
+  enable)     build_auth; cmd_enable "$@";;
+  delete)     build_auth; cmd_delete "$@";;
   -h|--help|help) usage 0;;
   *) echo "ERROR: unknown command: $sub" >&2; usage;;
 esac
