@@ -52,7 +52,8 @@ Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, e
 
 | Example | Description |
 |---------|-------------|
-| [research-writer](mastra/research-writer) | Sequential multi-agent workflow — research agent queries a knowledge base, writer agent produces a polished response |
+| [simple/research-writer](mastra/simple/research-writer) | Sequential multi-agent workflow — single shared OTLP exporter, simplest setup to get started |
+| [subtenant/research-writer](mastra/subtenant/research-writer) | Same workflow with per-subtenant OTLP exporter isolation — each tenant gets its own export queue |
 
 ### Vanilla (plain Python)
 
