@@ -6,7 +6,7 @@ let observability: Observability;
 export function initTracing() {
   const otelEndpoint =
     process.env.OTEL_ENDPOINT ||
-    "https://tp9jv7tcq3.execute-api.us-east-1.amazonaws.com/dev/proxy/v1/traces";
+    "https://api.lumoz.ai/proxy/v1/traces";
   const apiKey = process.env.LUMOZ_API_KEY || "";
 
   const headers: Record<string, string> = {
@@ -24,7 +24,6 @@ export function initTracing() {
   const arizeExporter = new ArizeExporter({
     endpoint: otelEndpoint,
     headers,
-    logLevel: "debug",
   });
 
   observability = new Observability({

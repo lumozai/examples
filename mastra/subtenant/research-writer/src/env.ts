@@ -2,9 +2,8 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Load shared demo/.env (3 levels up: research-writer → mastra → examples → demo)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const demoEnvPath = path.resolve(__dirname, "..",".env");
+const demoEnvPath = path.resolve(__dirname, "..", ".env");
 dotenv.config({ path: demoEnvPath });
 
 // Suppress OpenAI SDK debug logging (response 200, headers, etc.) by default.

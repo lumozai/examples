@@ -1,6 +1,8 @@
-# Mastra Research-Writer
+# Mastra Research-Writer (Subtenant)
 
-A multi-agent workflow example using the [Mastra](https://mastra.ai) framework with Lumoz observability. Two agents collaborate in a sequential pipeline: a **Research Agent** searches a knowledge base using vector search, then a **Writer Agent** synthesizes the findings into a polished response.
+A multi-agent workflow example using the [Mastra](https://mastra.ai) framework with Lumoz observability, demonstrating **per-subtenant OTLP exporter isolation**. Two agents collaborate in a sequential pipeline: a **Research Agent** searches a knowledge base using vector search, then a **Writer Agent** synthesizes the findings into a polished response. Each subtenant (`tenant_id`) gets its own OTLP exporter and batch queue so export requests are never mixed across tenants.
+
+> **Looking for the simpler single-tenant version?** See [mastra/simple/research-writer](../../simple/research-writer).
 
 ## Architecture
 
@@ -25,7 +27,8 @@ research-write workflow
 | File | Description |
 |------|-------------|
 | `src/index.ts` | Entry point — initializes tracing, seeds knowledge base, runs interactive CLI |
-| `src/tracing.ts` | OpenTelemetry setup with Lumoz/Arize exporter |
+| `src/tracing.ts` | OpenTelemetry setup — initializes the per-tenant exporter registry |
+| `src/tenantExporters.ts` | Per-subtenant exporter registry — one OTLP exporter and batch queue per `tenant_id` |
 | `src/agents/researcher.ts` | Research Agent with vector search tool |
 | `src/agents/writer.ts` | Writer Agent for content synthesis |
 | `src/workflows/research-write.ts` | Two-step workflow connecting both agents |
@@ -46,7 +49,7 @@ research-write workflow
 
 ## Setup
 
-1. Create a `.env` file in this directory (or in the parent):
+1. Create a `.env` file in this directory:
 
 ```bash
 OPENAI_API_KEY=sk-...

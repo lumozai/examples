@@ -48,7 +48,7 @@ research-write workflow
 
 ## Setup
 
-1. Create a `.env` file in this directory (or in the parent):
+1. Create a `.env` file in this directory:
 
 ```bash
 OPENAI_API_KEY=sk-...
