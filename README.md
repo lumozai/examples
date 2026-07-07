@@ -1,4 +1,4 @@
-# Lumoz Examples
+# Lumoz Integrations
 
 Example applications demonstrating how to instrument AI agents with [Lumoz](https://lumoz.ai) for observability.
 
