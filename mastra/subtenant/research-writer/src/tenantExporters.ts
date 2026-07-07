@@ -1,4 +1,4 @@
-import { ArizeExporter } from "@mastra/arize";
+import { LumozExporter } from "@mastra/lumoz";
 import {
   DefaultObservabilityInstance,
   Observability,
@@ -9,7 +9,6 @@ import { RequestContext } from "@mastra/core/request-context";
 import type { TracingEvent } from "@mastra/core/observability";
 
 const TENANT_ID_CONTEXT_KEY = "tenant_id";
-const TENANT_ID_HEADER = "x-lumoz-subtenant-id";
 const DEFAULT_CONFIG_NAME = "__lumoz_default__";
 
 type TenantExportersOptions = {
@@ -89,34 +88,23 @@ export class TenantExporters {
     await this.observability.shutdown();
   }
 
-  private createExporter(tenant_id: string): ArizeExporter {
+  private createExporter(tenant_id: string): LumozExporter {
     if (!this.options.apiKey) {
       throw new Error("LUMOZ_API_KEY is required to create a tenant exporter");
     }
 
-    const encodedApiKey = Buffer.from(this.options.apiKey, "utf-8").toString(
-      "base64",
-    );
-
-    const headers = {
-      // Required so API Gateway decodes the binary protobuf response.
-      // REST API only base64-decodes isBase64Encoded Lambda responses when
-      // the request includes a matching Accept header.
-      "accept": "application/x-protobuf",
-      "authorization": `Basic ${encodedApiKey}`,
-      [TENANT_ID_HEADER]: tenant_id,
-    };
-
     if (process.env.LUMOZ_PRINT_OTEL_HEADERS === "true") {
       console.log("[tracing] OTLP headers", {
-        ...headers,
+        accept: "application/x-protobuf",
         authorization: "REDACTED",
+        "x-lumoz-subtenant-id": tenant_id,
       });
     }
 
-    return new ArizeExporter({
+    return new LumozExporter({
+      apiKey: this.options.apiKey,
       endpoint: this.options.endpoint,
-      headers,
+      subtenantId: tenant_id,
       logLevel: this.options.logLevel,
     });
   }

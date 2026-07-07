@@ -8,6 +8,7 @@ let tenantExporters: TenantExporters;
 
 export function initTracing() {
   const otelEndpoint =
+    process.env.LUMOZ_ENDPOINT ||
     process.env.OTEL_ENDPOINT ||
     "https://api.lumoz.ai/proxy/v1/traces";
   const apiKey = process.env.LUMOZ_API_KEY || "";
@@ -19,7 +20,7 @@ export function initTracing() {
     logLevel: getExporterLogLevel(),
   });
 
-  console.log(`[tracing] Mastra observability with OpenInference enabled`);
+  console.log(`[tracing] Mastra observability with Lumoz enabled`);
   console.log(`[tracing] Exporting to ${otelEndpoint}`);
 }
 
