@@ -35,6 +35,12 @@ Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, e
 
 ## Examples
 
+### Anthropic Python SDK
+
+| Example | Description |
+|---------|-------------|
+| [get-started](anthropic-sdk/get-started) | Minimal tool-calling agent — AGENT, TOOL, and LLM spans from one loop |
+
 ### Claude Agent SDK
 
 | Example | Description |

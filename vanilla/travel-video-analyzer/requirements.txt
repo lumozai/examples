@@ -1,5 +1,8 @@
 # Core
-anthropic>=0.40.0
+# Pinned below 1.0: openinference-instrumentation-anthropic 1.1.2 imports
+# anthropic.resources.completions, which 1.x removed, so instrument() raises
+# ModuleNotFoundError. Drop the upper bound once the instrumentor supports 1.x.
+anthropic>=0.40.0,<1.0
 python-dotenv>=1.0.0
 opencv-python>=4.8.0
 
