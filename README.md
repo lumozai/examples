@@ -46,6 +46,7 @@ Lumoz uses **OpenInference**, the open source SDK for LLM application tracing, e
 | Example | Description |
 |---------|-------------|
 | [get-started](claude-agent-sdk/get-started) | Minimal agent that delegates to a sub-agent and runs a shell command |
+| [custom-tools](claude-agent-sdk/custom-tools) | Captures your system prompt, tool schemas, and sub-agent definitions in the trace |
 
 ### Google ADK
 
