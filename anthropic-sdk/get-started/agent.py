@@ -155,7 +155,7 @@ run = tracer.agent(name="weather_agent")(_run) if tracer else _run
 
 if __name__ == "__main__":
     try:
-        print(f"\nAnswer: {run('What is the weather in Paris?')}")
+        print(f"\nAnswer: {run('What is the weather in San Ramon?')}")
     finally:
         if tracer_provider is not None:
             tracer_provider.shutdown()

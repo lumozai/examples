@@ -1,8 +1,12 @@
 # Anthropic Python SDK.
-# Pinned below 1.0: openinference-instrumentation-anthropic 1.1.2 imports
-# anthropic.resources.completions, which 1.x removed, so instrument() raises
-# ModuleNotFoundError. Drop the upper bound once the instrumentor supports 1.x.
-anthropic>=0.40.0,<1.0
+# openinference-instrumentation-anthropic 2.x declares anthropic>=1.0.0 as its
+# instrumentation target (its own package metadata: `anthropic>=1.0.0; extra
+# == "instruments"`). Keep this in lockstep with the instrumentor pin below —
+# an SDK major version on one side without the other makes
+# AnthropicInstrumentor().instrument() detect a dependency conflict and
+# silently no-op (logs one ERROR line, returns None, never wraps
+# messages.create) instead of raising, so tracing loss is easy to miss.
+anthropic>=1.0.0
 
 # Environment
 python-dotenv>=1.0.0
@@ -11,4 +15,4 @@ python-dotenv>=1.0.0
 opentelemetry-sdk>=1.20.0
 opentelemetry-exporter-otlp-proto-http>=1.20.0
 openinference-instrumentation>=0.1.0
-openinference-instrumentation-anthropic>=1.1.0
+openinference-instrumentation-anthropic>=2.0.0
